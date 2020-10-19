@@ -42,6 +42,7 @@ from src.util import keep_loss_fp32
 
 set_seed(1)
 
+
 class BuildTrainNetwork(nn.Cell):
     def __init__(self, network, criterion):
         super(BuildTrainNetwork, self).__init__()
@@ -133,7 +134,7 @@ def parse_args():
         args.rank = get_rank()
         args.group_size = get_group_size()
 
-    # select for master rank save ckpt or all rank save, compatiable for model parallel
+    # select for master rank save ckpt or all rank save, compatable for model parallel
     args.rank_save_ckpt_flag = 0
     if args.is_save_on_master:
         if args.rank == 0:
@@ -150,7 +151,7 @@ def parse_args():
     return args
 
 
-def conver_training_shape(args):
+def convert_training_shape(args):
     training_shape = [int(args.training_shape), int(args.training_shape)]
     return training_shape
 
@@ -189,7 +190,7 @@ def train():
     config.label_smooth_factor = args.label_smooth_factor
 
     if args.training_shape:
-        config.multi_scale = [conver_training_shape(args)]
+        config.multi_scale = [convert_training_shape(args)]
     if args.resize_rate:
         config.resize_rate = args.resize_rate
 

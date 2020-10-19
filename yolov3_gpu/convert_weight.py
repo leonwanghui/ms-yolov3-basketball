@@ -21,6 +21,7 @@ from mindspore import Tensor
 
 from src.yolo import YOLOV3DarkNet53
 
+
 def load_weight(weights_file):
     """Loads pre-trained weights."""
     if not os.path.isfile(weights_file):
@@ -39,7 +40,7 @@ def build_network():
 
 
 def convert(weights_file, output_file):
-    """Conver weight to mindspore ckpt."""
+    """Convert weight to mindspore ckpt."""
     params = build_network()
     weights = load_weight(weights_file)
     index = 0
@@ -74,7 +75,7 @@ def convert(weights_file, output_file):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="yolov3 weight convert.")
     parser.add_argument("--input_file", type=str, default="./darknet53.conv.74", help="input file path.")
-    parser.add_argument("--output_file", type=str, default="./ackbone_darknet53.ckpt", help="output file path.")
+    parser.add_argument("--output_file", type=str, default="./backbone_darknet53.ckpt", help="output file path.")
     args_opt = parser.parse_args()
 
     convert(args_opt.input_file, args_opt.output_file)
