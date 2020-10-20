@@ -17,16 +17,15 @@ import os
 import time
 import argparse
 import datetime
+import moxing as mox
 
-from mindspore import ParallelMode
-from mindspore.nn.optim.momentum import Momentum
-from mindspore import Tensor
+import mindspore as ms
 import mindspore.nn as nn
-from mindspore import context
-from mindspore.communication.management import init, get_rank, get_group_size
+import mindspore.context as context
+from mindspore import Tensor
+from mindspore.nn.optim.momentum import Momentum
 from mindspore.train.callback import ModelCheckpoint, RunContext
 from mindspore.train.callback import _InternalCallbackParam, CheckpointConfig
-import mindspore as ms
 from mindspore.train.serialization import load_checkpoint, load_param_into_net
 
 from src.yolo import YOLOV3DarkNet53, YoloWithLossCell, TrainingWrapper
@@ -39,7 +38,6 @@ from src.initializer import default_recurisive_init
 from src.config import ConfigYOLOV3DarkNet53
 from src.transforms import batch_preprocess_true_box, batch_preprocess_true_box_single
 from src.util import ShapeRecord
-
 
 context.set_context(mode=context.GRAPH_MODE, enable_auto_mixed_precision=True,
                     device_target="Ascend", save_graphs=False)
@@ -62,8 +60,8 @@ def parse_args():
     parser = argparse.ArgumentParser('mindspore coco training')
 
     # dataset related
-    parser.add_argument('--data_dir', type=str, default='', help='train data dir')
     parser.add_argument('--per_batch_size', default=32, type=int, help='batch size for per gpu')
+    parser.add_argument('--epoch_size', type=int, default=320, help='max epoch num to train the model')
 
     # network related
     parser.add_argument('--pretrained_backbone', default='', type=str, help='model_path, local pretrained backbone'
@@ -78,8 +76,6 @@ def parse_args():
     parser.add_argument('--lr_gamma', type=float, default=0.1,
                         help='decrease lr by a factor of exponential lr_scheduler')
     parser.add_argument('--eta_min', type=float, default=0., help='eta_min in cosine_annealing scheduler')
-    parser.add_argument('--T_max', type=int, default=320, help='T-max in cosine_annealing scheduler')
-    parser.add_argument('--max_epoch', type=int, default=320, help='max epoch num to train the model')
     parser.add_argument('--warmup_epochs', default=0, type=float, help='warmup epoch')
     parser.add_argument('--weight_decay', type=float, default=0.0005, help='weight decay')
     parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
@@ -94,35 +90,25 @@ def parse_args():
     parser.add_argument('--ckpt_path', type=str, default='outputs/', help='checkpoint save location')
     parser.add_argument('--ckpt_interval', type=int, default=None, help='ckpt_interval')
 
+    parser.add_argument('--rank', type=int, default=0, help='Local rank of distributed. Default: 0')
+    parser.add_argument('--group_size', type=int, default=1, help='World size of device. Default: 1')
     parser.add_argument('--is_save_on_master', type=int, default=1, help='save ckpt on master or all rank')
 
-    # distributed related
-    parser.add_argument('--is_distributed', type=int, default=1, help='if multi device')
-    parser.add_argument('--rank', type=int, default=0, help='local rank of distributed')
-    parser.add_argument('--group_size', type=int, default=1, help='world size of distributed')
-
     # roma obs
-    parser.add_argument('--train_url', type=str, default="", help='train url')
-
-    # profiler init
-    parser.add_argument('--need_profiler', type=int, default=0, help='whether use profiler')
+    parser.add_argument('--data_url', required=True, default=None, help='Location of data.')
+    parser.add_argument('--train_url', required=True, default=None, help='Location of training outputs.')
 
     # reset default config
     parser.add_argument('--training_shape', type=str, default="", help='fix training shape')
     parser.add_argument('--resize_rate', type=int, default=None, help='resize rate for multi-scale training')
 
     args, _ = parser.parse_known_args()
-    if args.lr_scheduler == 'cosine_annealing' and args.max_epoch > args.T_max:
-        args.T_max = args.max_epoch
-
     args.lr_epochs = list(map(int, args.lr_epochs.split(',')))
-    args.data_root = os.path.join(args.data_dir, 'train2014')
-    args.annFile = os.path.join(args.data_dir, 'annotations/instances_train2014.json')
 
     return args
 
 
-def conver_training_shape(args):
+def convert_training_shape(args):
     training_shape = [int(args.training_shape), int(args.training_shape)]
     return training_shape
 
@@ -131,40 +117,13 @@ def train():
     """Train function."""
     args = parse_args()
 
-    # init distributed
-    if args.is_distributed:
-        init()
-        args.rank = get_rank()
-        args.group_size = get_group_size()
-
-    # select for master rank save ckpt or all rank save, compatable for model parallel
-    args.rank_save_ckpt_flag = 0
-    if args.is_save_on_master:
-        if args.rank == 0:
-            args.rank_save_ckpt_flag = 1
-    else:
-        args.rank_save_ckpt_flag = 1
-
     # logger
     args.outputs_dir = os.path.join(args.ckpt_path,
                                     datetime.datetime.now().strftime('%Y-%m-%d_time_%H_%M_%S'))
     args.logger = get_logger(args.outputs_dir, args.rank)
     args.logger.save_args(args)
 
-    if args.need_profiler:
-        from mindinsight.profiler.profiling import Profiler
-        profiler = Profiler(output_path=args.outputs_dir, is_detail=True, is_show_op_path=True)
-
     loss_meter = AverageMeter('loss')
-
-    context.reset_auto_parallel_context()
-    if args.is_distributed:
-        parallel_mode = ParallelMode.DATA_PARALLEL
-        degree = get_group_size()
-    else:
-        parallel_mode = ParallelMode.STAND_ALONE
-        degree = 1
-    context.set_auto_parallel_context(parallel_mode=parallel_mode, mirror_mean=True, device_num=degree)
 
     network = YOLOV3DarkNet53(is_training=True)
     # default is kaiming-normal
@@ -202,12 +161,20 @@ def train():
     config.label_smooth_factor = args.label_smooth_factor
 
     if args.training_shape:
-        config.multi_scale = [conver_training_shape(args)]
+        config.multi_scale = [convert_training_shape(args)]
     if args.resize_rate:
         config.resize_rate = args.resize_rate
 
-    ds, data_size = create_yolo_dataset(image_dir=args.data_root, anno_path=args.annFile, is_training=True,
-                                        batch_size=args.per_batch_size, max_epoch=args.max_epoch,
+    # data download
+    local_data_path = '/cache/data'
+    local_ckpt_path = '/cache/ckpt_file'
+    print('Download data.')
+    mox.file.copy_parallel(src_url=args.data_url, dst_url=local_data_path)
+
+    ds, data_size = create_yolo_dataset(image_dir=os.path.join(local_data_path, 'images'),
+                                        anno_path=os.path.join(local_data_path, 'annotation.json'),
+                                        is_training=True,
+                                        batch_size=args.per_batch_size, max_epoch=args.epoch_size,
                                         device_num=args.group_size, rank=args.rank, config=config)
     args.logger.info('Finish loading dataset')
 
@@ -222,30 +189,9 @@ def train():
                             args.lr_epochs,
                             args.steps_per_epoch,
                             args.warmup_epochs,
-                            args.max_epoch,
+                            args.epoch_size,
                             gamma=args.lr_gamma,
                             )
-    elif args.lr_scheduler == 'cosine_annealing':
-        lr = warmup_cosine_annealing_lr(args.lr,
-                                        args.steps_per_epoch,
-                                        args.warmup_epochs,
-                                        args.max_epoch,
-                                        args.T_max,
-                                        args.eta_min)
-    elif args.lr_scheduler == 'cosine_annealing_V2':
-        lr = warmup_cosine_annealing_lr_V2(args.lr,
-                                           args.steps_per_epoch,
-                                           args.warmup_epochs,
-                                           args.max_epoch,
-                                           args.T_max,
-                                           args.eta_min)
-    elif args.lr_scheduler == 'cosine_annealing_sample':
-        lr = warmup_cosine_annealing_lr_sample(args.lr,
-                                               args.steps_per_epoch,
-                                               args.warmup_epochs,
-                                               args.max_epoch,
-                                               args.T_max,
-                                               args.eta_min)
     else:
         raise NotImplementedError(args.lr_scheduler)
 
@@ -258,20 +204,19 @@ def train():
     network = TrainingWrapper(network, opt)
     network.set_train()
 
-    if args.rank_save_ckpt_flag:
-        # checkpoint save
-        ckpt_max_num = args.max_epoch * args.steps_per_epoch // args.ckpt_interval
-        ckpt_config = CheckpointConfig(save_checkpoint_steps=args.ckpt_interval,
-                                       keep_checkpoint_max=ckpt_max_num)
-        ckpt_cb = ModelCheckpoint(config=ckpt_config,
-                                  directory=args.outputs_dir,
-                                  prefix='{}'.format(args.rank))
-        cb_params = _InternalCallbackParam()
-        cb_params.train_network = network
-        cb_params.epoch_num = ckpt_max_num
-        cb_params.cur_epoch_num = 1
-        run_context = RunContext(cb_params)
-        ckpt_cb.begin(run_context)
+    # checkpoint save
+    ckpt_max_num = 10
+    ckpt_config = CheckpointConfig(save_checkpoint_steps=args.ckpt_interval,
+                                   keep_checkpoint_max=ckpt_max_num)
+    ckpt_cb = ModelCheckpoint(config=ckpt_config,
+                              directory=local_ckpt_path,
+                              prefix='yolov3')
+    cb_params = _InternalCallbackParam()
+    cb_params.train_network = network
+    cb_params.epoch_num = ckpt_max_num
+    cb_params.cur_epoch_num = 1
+    run_context = RunContext(cb_params)
+    ckpt_cb.begin(run_context)
 
     old_progress = -1
     t_end = time.time()
@@ -305,11 +250,10 @@ def train():
                        batch_gt_box2, input_shape)
         loss_meter.update(loss.asnumpy())
 
-        if args.rank_save_ckpt_flag:
-            # ckpt progress
-            cb_params.cur_step_num = i + 1  # current step number
-            cb_params.batch_num = i + 2
-            ckpt_cb.step_end(run_context)
+        # ckpt progress
+        cb_params.cur_step_num = i + 1  # current step number
+        cb_params.batch_num = i + 2
+        ckpt_cb.step_end(run_context)
 
         if i % args.log_interval == 0:
             time_used = time.time() - t_end
@@ -322,15 +266,14 @@ def train():
             loss_meter.reset()
             old_progress = i
 
-        if (i + 1) % args.steps_per_epoch == 0 and args.rank_save_ckpt_flag:
+        if (i + 1) % args.steps_per_epoch == 0:
             cb_params.cur_epoch_num += 1
 
-        if args.need_profiler:
-            if i == 10:
-                profiler.analyse()
-                break
-
     args.logger.info('==========end training===============')
+
+    # upload checkpoint files
+    print('Upload checkpoint.')
+    mox.file.copy_parallel(src_url=local_ckpt_path, dst_url=args.train_url)
 
 
 if __name__ == "__main__":

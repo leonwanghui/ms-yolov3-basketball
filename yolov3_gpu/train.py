@@ -60,12 +60,15 @@ def parse_args():
     parser = argparse.ArgumentParser('mindspore coco training')
 
     # device related
-    parser.add_argument('--device_target', type=str, default='Ascend', choices=['Ascend', 'GPU'],
-                        help='device where the code will be implemented. (Default: Ascend)')
+    parser.add_argument('--device_target', type=str, default='GPU', choices=['Ascend', 'GPU'],
+                        help='device where the code will be implemented. (Default: GPU)')
 
     # dataset related
-    parser.add_argument('--data_dir', type=str, help='Train dataset directory.')
-    parser.add_argument('--per_batch_size', default=32, type=int, help='Batch size for Training. Default: 32.')
+    parser.add_argument('--data_dir', required=True,  type=str, help='Train dataset directory.')
+    parser.add_argument('--per_batch_size', default=4, type=int, help='Batch size for Training. Default: 4.')
+    parser.add_argument('--max_epoch', required=True, type=int, default=320,
+                        help='max epoch num to train the model. Default: 320.')
+    parser.add_argument('--warmup_epochs', default=0, type=float, help='Warmup epochs. Default: 0')
 
     # network related
     parser.add_argument('--pretrained_backbone', default='', type=str,
@@ -81,10 +84,6 @@ def parse_args():
                         help='Epoch of changing of lr changing, split with ",". Default: 220,250')
     parser.add_argument('--lr_gamma', type=float, default=0.1,
                         help='Decrease lr by a factor of exponential lr_scheduler. Default: 0.1')
-    parser.add_argument('--eta_min', type=float, default=0., help='Eta_min in cosine_annealing scheduler. Default: 0')
-    parser.add_argument('--T_max', type=int, default=320, help='T-max in cosine_annealing scheduler. Default: 320')
-    parser.add_argument('--max_epoch', type=int, default=320, help='Max epoch num to train the model. Default: 320')
-    parser.add_argument('--warmup_epochs', default=0, type=float, help='Warmup epochs. Default: 0')
     parser.add_argument('--weight_decay', type=float, default=0.0005, help='Weight decay factor. Default: 0.0005')
     parser.add_argument('--momentum', type=float, default=0.9, help='Momentum. Default: 0.9')
 
@@ -99,18 +98,11 @@ def parse_args():
     parser.add_argument('--ckpt_path', type=str, default='outputs/', help='Checkpoint save location. Default: outputs/')
     parser.add_argument('--ckpt_interval', type=int, default=None, help='Save checkpoint interval. Default: None')
 
-    parser.add_argument('--is_save_on_master', type=int, default=1,
-                        help='Save ckpt on master or all rank, 1 for master, 0 for all ranks. Default: 1')
-
     # distributed related
     parser.add_argument('--is_distributed', type=int, default=1,
                         help='Distribute train or not, 1 for yes, 0 for no. Default: 1')
     parser.add_argument('--rank', type=int, default=0, help='Local rank of distributed. Default: 0')
     parser.add_argument('--group_size', type=int, default=1, help='World size of device. Default: 1')
-
-    # profiler init
-    parser.add_argument('--need_profiler', type=int, default=0,
-                        help='Whether use profiler. 0 for no, 1 for yes. Default: 0')
 
     # reset default config
     parser.add_argument('--training_shape', type=str, default="", help='Fix training shape. Default: ""')
@@ -118,12 +110,10 @@ def parse_args():
                         help='Resize rate for multi-scale training. Default: None')
 
     args, _ = parser.parse_known_args()
-    if args.lr_scheduler == 'cosine_annealing' and args.max_epoch > args.T_max:
-        args.T_max = args.max_epoch
 
     args.lr_epochs = list(map(int, args.lr_epochs.split(',')))
-    args.data_root = os.path.join(args.data_dir, 'train2014')
-    args.annFile = os.path.join(args.data_dir, 'annotations/instances_train2014.json')
+    args.data_root = os.path.join(args.data_dir, 'images')
+    args.ann_file = os.path.join(args.data_dir, 'annotation.json')
 
     # init distributed
     if args.is_distributed:
@@ -133,14 +123,6 @@ def parse_args():
             init("nccl")
         args.rank = get_rank()
         args.group_size = get_group_size()
-
-    # select for master rank save ckpt or all rank save, compatable for model parallel
-    args.rank_save_ckpt_flag = 0
-    if args.is_save_on_master:
-        if args.rank == 0:
-            args.rank_save_ckpt_flag = 1
-    else:
-        args.rank_save_ckpt_flag = 1
 
     # logger
     args.outputs_dir = os.path.join(args.ckpt_path,
@@ -161,20 +143,8 @@ def train():
     args = parse_args()
     devid = int(os.getenv('DEVICE_ID', '0'))
     context.set_context(mode=context.GRAPH_MODE, enable_auto_mixed_precision=True,
-                        device_target=args.device_target, save_graphs=True, device_id=devid)
-    if args.need_profiler:
-        from mindspore.profiler.profiling import Profiler
-        profiler = Profiler(output_path=args.outputs_dir, is_detail=True, is_show_op_path=True)
-
+                        device_target=args.device_target, save_graphs=False, device_id=devid)
     loss_meter = AverageMeter('loss')
-
-    context.reset_auto_parallel_context()
-    parallel_mode = ParallelMode.STAND_ALONE
-    degree = 1
-    if args.is_distributed:
-        parallel_mode = ParallelMode.DATA_PARALLEL
-        degree = get_group_size()
-    context.set_auto_parallel_context(parallel_mode=parallel_mode, gradients_mean=True, device_num=degree)
 
     network = YOLOV3DarkNet53(is_training=True)
     # default is kaiming-normal
@@ -194,7 +164,7 @@ def train():
     if args.resize_rate:
         config.resize_rate = args.resize_rate
 
-    ds, data_size = create_yolo_dataset(image_dir=args.data_root, anno_path=args.annFile, is_training=True,
+    ds, data_size = create_yolo_dataset(image_dir=args.data_root, anno_path=args.ann_file, is_training=True,
                                         batch_size=args.per_batch_size, max_epoch=args.max_epoch,
                                         device_num=args.group_size, rank=args.rank, config=config)
     args.logger.info('Finish loading dataset')
@@ -222,21 +192,20 @@ def train():
         network = TrainingWrapper(network, opt)
         network.set_train()
 
-    if args.rank_save_ckpt_flag:
-        # checkpoint save
-        ckpt_max_num = args.max_epoch * args.steps_per_epoch // args.ckpt_interval
-        ckpt_config = CheckpointConfig(save_checkpoint_steps=args.ckpt_interval,
-                                       keep_checkpoint_max=ckpt_max_num)
-        save_ckpt_path = os.path.join(args.outputs_dir, 'ckpt_' + str(args.rank) + '/')
-        ckpt_cb = ModelCheckpoint(config=ckpt_config,
-                                  directory=save_ckpt_path,
-                                  prefix='{}'.format(args.rank))
-        cb_params = _InternalCallbackParam()
-        cb_params.train_network = network
-        cb_params.epoch_num = ckpt_max_num
-        cb_params.cur_epoch_num = 1
-        run_context = RunContext(cb_params)
-        ckpt_cb.begin(run_context)
+    # checkpoint save
+    ckpt_max_num = 10
+    ckpt_config = CheckpointConfig(save_checkpoint_steps=args.ckpt_interval,
+                                   keep_checkpoint_max=ckpt_max_num)
+    save_ckpt_path = os.path.join(args.outputs_dir, 'ckpt_' + str(args.rank) + '/')
+    ckpt_cb = ModelCheckpoint(config=ckpt_config,
+                              directory=save_ckpt_path,
+                              prefix='yolov3')
+    cb_params = _InternalCallbackParam()
+    cb_params.train_network = network
+    cb_params.epoch_num = ckpt_max_num
+    cb_params.cur_epoch_num = 1
+    run_context = RunContext(cb_params)
+    ckpt_cb.begin(run_context)
 
     old_progress = -1
     t_end = time.time()
@@ -261,11 +230,10 @@ def train():
                        batch_gt_box2, input_shape)
         loss_meter.update(loss.asnumpy())
 
-        if args.rank_save_ckpt_flag:
-            # ckpt progress
-            cb_params.cur_step_num = i + 1  # current step number
-            cb_params.batch_num = i + 2
-            ckpt_cb.step_end(run_context)
+        # ckpt progress
+        cb_params.cur_step_num = i + 1  # current step number
+        cb_params.batch_num = i + 2
+        ckpt_cb.step_end(run_context)
 
         if i % args.log_interval == 0:
             time_used = time.time() - t_end
@@ -278,13 +246,8 @@ def train():
             loss_meter.reset()
             old_progress = i
 
-        if (i + 1) % args.steps_per_epoch == 0 and args.rank_save_ckpt_flag:
+        if (i + 1) % args.steps_per_epoch == 0:
             cb_params.cur_epoch_num += 1
-
-        if args.need_profiler:
-            if i == 10:
-                profiler.analyse()
-                break
 
     args.logger.info('==========end training===============')
 

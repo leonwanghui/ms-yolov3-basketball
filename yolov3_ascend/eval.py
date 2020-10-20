@@ -21,25 +21,24 @@ import sys
 from collections import defaultdict
 
 import numpy as np
+import moxing as mox
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
-from mindspore import Tensor
-from mindspore.train import ParallelMode
-from mindspore import context
-from mindspore.train.serialization import load_checkpoint, load_param_into_net
 import mindspore as ms
+import mindspore.context as context
+from mindspore import Tensor
+from mindspore.train.serialization import load_checkpoint, load_param_into_net
 
 from src.yolo import YOLOV3DarkNet53
 from src.logger import get_logger
 from src.yolo_dataset import create_yolo_dataset
 from src.config import ConfigYOLOV3DarkNet53
 
-devid = int(os.getenv('DEVICE_ID'))
-context.set_context(mode=context.GRAPH_MODE, device_target="Ascend", save_graphs=True, device_id=devid)
+context.set_context(mode=context.GRAPH_MODE, device_target="Ascend", save_graphs=False)
 
 
-class Redirct:
+class Redirect:
     def __init__(self):
         self.content = ""
 
@@ -50,26 +49,22 @@ class Redirct:
         self.content = ""
 
 
+label_list = ['ball', 'defense', 'basket', 'shoot', 'run',
+              'stand', 'block', 'pass']
+
+
 class DetectionEngine:
     """Detection engine."""
+
     def __init__(self, args):
         self.ignore_threshold = args.ignore_threshold
-        self.labels = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
-                       'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',
-                       'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack',
-                       'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
-                       'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
-                       'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
-                       'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair',
-                       'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote',
-                       'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book',
-                       'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
+        self.labels = label_list
         self.num_classes = len(self.labels)
         self.results = {}
         self.file_path = ''
         self.save_prefix = args.outputs_dir
-        self.annFile = args.annFile
-        self._coco = COCO(self.annFile)
+        self.ann_file = args.ann_file
+        self._coco = COCO(self.ann_file)
         self._img_ids = list(sorted(self._coco.imgs.keys()))
         self.det_boxes = []
         self.nms_thresh = args.nms_thresh
@@ -136,12 +131,12 @@ class DetectionEngine:
 
     def get_eval_result(self):
         """Get eval result."""
-        cocoGt = COCO(self.annFile)
+        cocoGt = COCO(self.ann_file)
         cocoDt = cocoGt.loadRes(self.file_path)
         cocoEval = COCOeval(cocoGt, cocoDt, 'bbox')
         cocoEval.evaluate()
         cocoEval.accumulate()
-        rdct = Redirct()
+        rdct = Redirect()
         stdout = sys.stdout
         sys.stdout = rdct
         cocoEval.summarize()
@@ -184,7 +179,7 @@ class DetectionEngine:
 
                 x_top_left = x - w / 2.
                 y_top_left = y - h / 2.
-                # creat all False
+                # create all False
                 flag = np.random.random(cls_emb.shape) > sys.maxsize
                 for i in range(flag.shape[0]):
                     c = cls_argmax[i]
@@ -209,30 +204,27 @@ def parse_args():
     parser = argparse.ArgumentParser('mindspore coco testing')
 
     # dataset related
-    parser.add_argument('--data_dir', type=str, default='', help='train data dir')
     parser.add_argument('--per_batch_size', default=1, type=int, help='batch size for per gpu')
-
-    # network related
-    parser.add_argument('--pretrained', default='', type=str, help='model_path, local pretrained model to load')
 
     # logging related
     parser.add_argument('--log_path', type=str, default='outputs/', help='checkpoint save location')
 
     # detect_related
     parser.add_argument('--nms_thresh', type=float, default=0.5, help='threshold for NMS')
-    parser.add_argument('--annFile', type=str, default='', help='path to annotation')
     parser.add_argument('--testing_shape', type=str, default='', help='shape for test ')
     parser.add_argument('--ignore_threshold', type=float, default=0.001, help='threshold to throw low quality boxes')
 
-    args, _ = parser.parse_known_args()
+    # roma obs
+    parser.add_argument('--data_url', required=True, default=None, help='Location of data.')
+    parser.add_argument('--train_url', required=True, default=None, help='Location of training outputs.')
+    parser.add_argument('--checkpoint_path', required=True, type=str, default=None, help='Checkpoint file path')
 
-    args.data_root = os.path.join(args.data_dir, 'val2014')
-    args.annFile = os.path.join(args.data_dir, 'annotations/instances_val2014.json')
+    args, _ = parser.parse_known_args()
 
     return args
 
 
-def conver_testing_shape(args):
+def convert_testing_shape(args):
     """Convert testing shape to list."""
     testing_shape = [int(args.testing_shape), int(args.testing_shape)]
     return testing_shape
@@ -249,16 +241,18 @@ def test():
     rank_id = int(os.environ.get('RANK_ID'))
     args.logger = get_logger(args.outputs_dir, rank_id)
 
-    context.reset_auto_parallel_context()
-    parallel_mode = ParallelMode.STAND_ALONE
-    context.set_auto_parallel_context(parallel_mode=parallel_mode, mirror_mean=True, device_num=1)
-
     args.logger.info('Creating Network....')
     network = YOLOV3DarkNet53(is_training=False)
 
-    args.logger.info(args.pretrained)
-    if os.path.isfile(args.pretrained):
-        param_dict = load_checkpoint(args.pretrained)
+    ckpt_file_slice = args.checkpoint_path.split('/')
+    ckpt_file = ckpt_file_slice[len(ckpt_file_slice)-1]
+    local_ckpt_path = '/cache/'+ckpt_file
+    # download checkpoint
+    mox.file.copy_parallel(src_url=args.checkpoint_path, dst_url=local_ckpt_path)
+
+    args.logger.info(local_ckpt_path)
+    if os.path.isfile(local_ckpt_path):
+        param_dict = load_checkpoint(local_ckpt_path)
         param_dict_new = {}
         for key, values in param_dict.items():
             if key.startswith('moments.'):
@@ -268,20 +262,25 @@ def test():
             else:
                 param_dict_new[key] = values
         load_param_into_net(network, param_dict_new)
-        args.logger.info('load_model {} success'.format(args.pretrained))
+        args.logger.info('load_model {} success'.format(local_ckpt_path))
     else:
-        args.logger.info('{} not exists or not a pre-trained file'.format(args.pretrained))
-        assert FileNotFoundError('{} not exists or not a pre-trained file'.format(args.pretrained))
+        args.logger.info('{} not exists or not a pre-trained file'.format(local_ckpt_path))
+        assert FileNotFoundError('{} not exists or not a pre-trained file'.format(local_ckpt_path))
         exit(1)
-
-    data_root = args.data_root
-    ann_file = args.annFile
 
     config = ConfigYOLOV3DarkNet53()
     if args.testing_shape:
-        config.test_img_shape = conver_testing_shape(args)
+        config.test_img_shape = convert_testing_shape(args)
 
-    ds, data_size = create_yolo_dataset(data_root, ann_file, is_training=False, batch_size=args.per_batch_size,
+    local_data_path = '/cache/data'
+    # data download
+    print('Download data.')
+    mox.file.copy_parallel(src_url=args.data_url, dst_url=local_data_path)
+    args.data_root = os.path.join(local_data_path, 'images')
+    args.ann_file = os.path.join(local_data_path, 'annotation.json')
+
+    ds, data_size = create_yolo_dataset(args.data_root, args.ann_file,
+                                        is_training=False, batch_size=args.per_batch_size,
                                         max_epoch=1, device_num=1, rank=rank_id, shuffle=False,
                                         config=config)
 
@@ -320,7 +319,7 @@ def test():
     eval_result = detection.get_eval_result()
 
     cost_time = time.time() - start_time
-    args.logger.info('\n=============coco eval reulst=========\n' + eval_result)
+    args.logger.info('\n=============coco eval result=========\n' + eval_result)
     args.logger.info('testing cost time {:.2f}h'.format(cost_time / 3600.))
 
 
