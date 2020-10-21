@@ -1,0 +1,37 @@
+<annotation>
+	<folder>basketball-dataset</folder>
+	<filename>000121.jpg</filename>
+	<path>/basketball-dataset/000121.jpg</path>
+	<source>
+		<database>Unspecified</database>
+	</source>
+	<size>
+		<width>791</width>
+		<height>435</height>
+		<depth>3</depth>
+	</size>
+	<object>
+		<name>shoot</name>
+		<pose>Unspecified</pose>
+		<truncated>Unspecified</truncated>
+		<difficult>Unspecified</difficult>
+		<bndbox>
+			<xmin>217</xmin>
+			<ymin>8</ymin>
+			<xmax>490</xmax>
+			<ymax>435</ymax>
+		</bndbox>
+	</object>
+	<object>
+		<name>ball</name>
+		<pose>Unspecified</pose>
+		<truncated>Unspecified</truncated>
+		<difficult>Unspecified</difficult>
+		<bndbox>
+			<xmin>268</xmin>
+			<ymin>4</ymin>
+			<xmax>402</xmax>
+			<ymax>134</ymax>
+		</bndbox>
+	</object>
+</annotation>

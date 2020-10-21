@@ -47,7 +47,8 @@ class Redirect:
 
 
 label_list = ['ball', 'defense', 'basket', 'shoot', 'run',
-              'stand', 'block', 'pass']
+              'stand', 'block', 'pass', 'dunk', 'rebound',
+              'breakthrough']
 
 
 class DetectionEngine:
