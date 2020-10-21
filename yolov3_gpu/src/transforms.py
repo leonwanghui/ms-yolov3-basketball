@@ -14,12 +14,11 @@
 # ============================================================================
 """Preprocess dataset."""
 import random
-import threading
 import copy
 
 import numpy as np
-from PIL import Image
 import cv2
+from PIL import Image
 
 
 def _rand(a=0., b=1.):
@@ -259,7 +258,7 @@ def color_distortion(img, hue, sat, val, device_num):
     return image_data
 
 
-def filp_pil_image(img):
+def flip_pil_image(img):
     return img.transpose(Image.FLIP_LEFT_RIGHT)
 
 
@@ -410,13 +409,13 @@ def _data_aug(image, box, jitter, hue, sat, val, image_input_size, max_boxes,
     dx, dy, nw, nh = candidate
     interp = get_interp_method(interp=10)
     image = image.resize((nw, nh), pil_image_reshape(interp))
-    # place image, gray color as back graoud
+    # place image, gray color as back ground
     new_image = Image.new('RGB', (input_w, input_h), (128, 128, 128))
     new_image.paste(image, (dx, dy))
     image = new_image
 
     if flip:
-        image = filp_pil_image(image)
+        image = flip_pil_image(image)
 
     image = np.array(image)
 
@@ -454,6 +453,7 @@ def reshape_fn(image, img_id, config):
 
 class MultiScaleTrans:
     """Multi scale transform."""
+
     def __init__(self, config, device_num):
         self.config = config
         self.seed = 0
@@ -515,79 +515,4 @@ class MultiScaleTrans:
             gt3.append(gt_box3)
             ret_annos.append(0)
         return np.array(ret_imgs), np.array(ret_annos), np.array(bbox1), np.array(bbox2), np.array(bbox3), \
-               np.array(gt1), np.array(gt2), np.array(gt3)
-
-
-def thread_batch_preprocess_true_box(annos, config, input_shape, result_index, batch_bbox_true_1, batch_bbox_true_2,
-                                     batch_bbox_true_3, batch_gt_box1, batch_gt_box2, batch_gt_box3):
-    """Preprocess true box for multi-thread."""
-    i = 0
-    for anno in annos:
-        bbox_true_1, bbox_true_2, bbox_true_3, gt_box1, gt_box2, gt_box3 = \
-            _preprocess_true_boxes(true_boxes=anno, anchors=config.anchor_scales, in_shape=input_shape,
-                                   num_classes=config.num_classes, max_boxes=config.max_box,
-                                   label_smooth=config.label_smooth, label_smooth_factor=config.label_smooth_factor)
-        batch_bbox_true_1[result_index + i] = bbox_true_1
-        batch_bbox_true_2[result_index + i] = bbox_true_2
-        batch_bbox_true_3[result_index + i] = bbox_true_3
-        batch_gt_box1[result_index + i] = gt_box1
-        batch_gt_box2[result_index + i] = gt_box2
-        batch_gt_box3[result_index + i] = gt_box3
-        i = i + 1
-
-
-def batch_preprocess_true_box(annos, config, input_shape):
-    """Preprocess true box with multi-thread."""
-    batch_bbox_true_1 = []
-    batch_bbox_true_2 = []
-    batch_bbox_true_3 = []
-    batch_gt_box1 = []
-    batch_gt_box2 = []
-    batch_gt_box3 = []
-    threads = []
-
-    step = 4
-    for index in range(0, len(annos), step):
-        for _ in range(step):
-            batch_bbox_true_1.append(None)
-            batch_bbox_true_2.append(None)
-            batch_bbox_true_3.append(None)
-            batch_gt_box1.append(None)
-            batch_gt_box2.append(None)
-            batch_gt_box3.append(None)
-        step_anno = annos[index: index + step]
-        t = threading.Thread(target=thread_batch_preprocess_true_box,
-                             args=(step_anno, config, input_shape, index, batch_bbox_true_1, batch_bbox_true_2,
-                                   batch_bbox_true_3, batch_gt_box1, batch_gt_box2, batch_gt_box3))
-        t.start()
-        threads.append(t)
-
-    for t in threads:
-        t.join()
-
-    return np.array(batch_bbox_true_1), np.array(batch_bbox_true_2), np.array(batch_bbox_true_3), \
-           np.array(batch_gt_box1), np.array(batch_gt_box2), np.array(batch_gt_box3)
-
-
-def batch_preprocess_true_box_single(annos, config, input_shape):
-    """Preprocess true boxes."""
-    batch_bbox_true_1 = []
-    batch_bbox_true_2 = []
-    batch_bbox_true_3 = []
-    batch_gt_box1 = []
-    batch_gt_box2 = []
-    batch_gt_box3 = []
-    for anno in annos:
-        bbox_true_1, bbox_true_2, bbox_true_3, gt_box1, gt_box2, gt_box3 = \
-            _preprocess_true_boxes(true_boxes=anno, anchors=config.anchor_scales, in_shape=input_shape,
-                                   num_classes=config.num_classes, max_boxes=config.max_box,
-                                   label_smooth=config.label_smooth, label_smooth_factor=config.label_smooth_factor)
-        batch_bbox_true_1.append(bbox_true_1)
-        batch_bbox_true_2.append(bbox_true_2)
-        batch_bbox_true_3.append(bbox_true_3)
-        batch_gt_box1.append(gt_box1)
-        batch_gt_box2.append(gt_box2)
-        batch_gt_box3.append(gt_box3)
-
-    return np.array(batch_bbox_true_1), np.array(batch_bbox_true_2), np.array(batch_bbox_true_3), \
-           np.array(batch_gt_box1), np.array(batch_gt_box2), np.array(batch_gt_box3)
+            np.array(gt1), np.array(gt2), np.array(gt3)

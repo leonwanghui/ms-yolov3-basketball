@@ -94,6 +94,7 @@ class DarkNet(nn.Cell):
                [64, 128, 256, 512, 1024],
                100)
     """
+
     def __init__(self,
                  block,
                  layer_nums,
@@ -106,7 +107,7 @@ class DarkNet(nn.Cell):
         self.detect = detect
 
         if not len(layer_nums) == len(in_channels) == len(out_channels) == 5:
-            raise ValueError("the length of layer_num, inchannel, outchannel list must be 5!")
+            raise ValueError("the length of layer_num, in_channel, out_channel list must be 5!")
         self.conv0 = conv_block(3,
                                 in_channels[0],
                                 kernel_size=3,

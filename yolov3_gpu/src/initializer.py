@@ -14,13 +14,16 @@
 # ============================================================================
 """Parameter init."""
 import math
-from functools import reduce
 import numpy as np
+from functools import reduce
+
+import mindspore.nn as nn
 from mindspore.common import initializer as init
 from mindspore.common.initializer import Initializer as MeInitializer
 from mindspore.train.serialization import load_checkpoint, load_param_into_net
-import mindspore.nn as nn
+
 from .util import load_backbone
+
 
 def calculate_gain(nonlinearity, param=None):
     r"""Return the recommended gain value for the given nonlinearity function.
@@ -141,6 +144,7 @@ def _calculate_fan_in_and_fan_out(arr):
 
 class KaimingUniform(MeInitializer):
     """Kaiming uniform initializer."""
+
     def __init__(self, a=0, mode='fan_in', nonlinearity='leaky_relu'):
         super(KaimingUniform, self).__init__()
         self.a = a
@@ -152,7 +156,7 @@ class KaimingUniform(MeInitializer):
         _assignment(arr, tmp)
 
 
-def default_recurisive_init(custom_cell):
+def default_recursive_init(custom_cell):
     """Initialize parameter."""
     for _, cell in custom_cell.cells_and_names():
         if isinstance(cell, nn.Conv2d):
@@ -177,6 +181,7 @@ def default_recurisive_init(custom_cell):
                                                     cell.bias.dtype))
         elif isinstance(cell, (nn.BatchNorm2d, nn.BatchNorm1d)):
             pass
+
 
 def load_yolov3_params(args, network):
     """Load yolov3 darknet parameter from checkpoint."""

@@ -14,9 +14,8 @@
 # ============================================================================
 """Learning rate scheduler."""
 import math
-from collections import Counter
-
 import numpy as np
+from collections import Counter
 
 
 def linear_warmup_lr(current_step, warmup_steps, base_lr, init_lr):

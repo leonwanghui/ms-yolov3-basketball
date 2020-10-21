@@ -13,9 +13,9 @@
 # limitations under the License.
 # ============================================================================
 """Util class or function."""
-from mindspore.train.serialization import load_checkpoint
 import mindspore.nn as nn
 import mindspore.common.dtype as mstype
+from mindspore.train.serialization import load_checkpoint
 
 from .yolo import YoloLossBlock
 
@@ -152,6 +152,7 @@ def get_param_groups(network):
 
 class ShapeRecord:
     """Log image shape."""
+
     def __init__(self):
         self.shape_record = {
             320: 0,

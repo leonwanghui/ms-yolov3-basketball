@@ -18,16 +18,14 @@ import time
 import argparse
 import datetime
 
-from mindspore.context import ParallelMode
-from mindspore.nn.optim.momentum import Momentum
-from mindspore import Tensor
+import mindspore as ms
 import mindspore.nn as nn
-from mindspore import context
+import mindspore.context as context
+from mindspore import amp, Tensor
+from mindspore.nn.optim.momentum import Momentum
 from mindspore.communication.management import init, get_rank, get_group_size
 from mindspore.train.callback import ModelCheckpoint, RunContext
 from mindspore.train.callback import _InternalCallbackParam, CheckpointConfig
-import mindspore as ms
-from mindspore import amp
 from mindspore.train.loss_scale_manager import FixedLossScaleManager
 from mindspore.common import set_seed
 
@@ -36,7 +34,7 @@ from src.logger import get_logger
 from src.util import AverageMeter, get_param_groups
 from src.lr_scheduler import get_lr
 from src.yolo_dataset import create_yolo_dataset
-from src.initializer import default_recurisive_init, load_yolov3_params
+from src.initializer import default_recursive_init, load_yolov3_params
 from src.config import ConfigYOLOV3DarkNet53
 from src.util import keep_loss_fp32
 
@@ -148,7 +146,7 @@ def train():
 
     network = YOLOV3DarkNet53(is_training=True)
     # default is kaiming-normal
-    default_recurisive_init(network)
+    default_recursive_init(network)
     load_yolov3_params(args, network)
 
     network = YoloWithLossCell(network)
