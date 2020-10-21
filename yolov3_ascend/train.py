@@ -129,8 +129,14 @@ def train():
     # default is kaiming-normal
     default_recurisive_init(network)
 
+    pretrained_backbone_slice = args.pretrained_backbone.split('/')
+    backbone_ckpt_file = pretrained_backbone_slice[len(pretrained_backbone_slice)-1]
+    local_backbone_ckpt_path = '/cache/'+backbone_ckpt_file
+    # download backbone checkpoint
+    mox.file.copy_parallel(src_url=args.pretrained_backbone, dst_url=local_backbone_ckpt_path)
+
     if args.pretrained_backbone:
-        network = load_backbone(network, args.pretrained_backbone, args)
+        network = load_backbone(network, local_backbone_ckpt_path, args)
         args.logger.info('load pre-trained backbone {} into network'.format(args.pretrained_backbone))
     else:
         args.logger.info('Not load pre-trained backbone, please be careful')
