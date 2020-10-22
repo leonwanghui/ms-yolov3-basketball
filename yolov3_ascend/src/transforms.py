@@ -18,8 +18,8 @@ import threading
 import copy
 
 import numpy as np
-from PIL import Image
 import cv2
+from PIL import Image
 
 
 def _rand(a=0., b=1.):
@@ -266,7 +266,7 @@ def color_distortion(img, hue, sat, val, device_num):
     return image_data
 
 
-def filp_pil_image(img):
+def flip_pil_image(img):
     return img.transpose(Image.FLIP_LEFT_RIGHT)
 
 
@@ -417,13 +417,13 @@ def _data_aug(image, box, jitter, hue, sat, val, image_input_size, max_boxes,
     dx, dy, nw, nh = candidate
     interp = get_interp_method(interp=10)
     image = image.resize((nw, nh), pil_image_reshape(interp))
-    # place image, gray color as back graoud
+    # place image, gray color as back ground
     new_image = Image.new('RGB', (input_w, input_h), (128, 128, 128))
     new_image.paste(image, (dx, dy))
     image = new_image
 
     if flip:
-        image = filp_pil_image(image)
+        image = flip_pil_image(image)
 
     image = np.array(image)
 
@@ -461,6 +461,7 @@ def reshape_fn(image, img_id, config):
 
 class MultiScaleTrans:
     """Multi scale transform."""
+
     def __init__(self, config, device_num):
         self.config = config
         self.seed = 0
@@ -550,7 +551,7 @@ def batch_preprocess_true_box(annos, config, input_shape):
         t.join()
 
     return np.array(batch_bbox_true_1), np.array(batch_bbox_true_2), np.array(batch_bbox_true_3), \
-           np.array(batch_gt_box1), np.array(batch_gt_box2), np.array(batch_gt_box3)
+        np.array(batch_gt_box1), np.array(batch_gt_box2), np.array(batch_gt_box3)
 
 
 def batch_preprocess_true_box_single(annos, config, input_shape):
@@ -574,4 +575,4 @@ def batch_preprocess_true_box_single(annos, config, input_shape):
         batch_gt_box3.append(gt_box3)
 
     return np.array(batch_bbox_true_1), np.array(batch_bbox_true_2), np.array(batch_bbox_true_3), \
-           np.array(batch_gt_box1), np.array(batch_gt_box2), np.array(batch_gt_box3)
+        np.array(batch_gt_box1), np.array(batch_gt_box2), np.array(batch_gt_box3)

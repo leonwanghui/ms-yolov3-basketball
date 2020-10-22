@@ -141,7 +141,7 @@ class DetectionEngine:
         sys.stdout = stdout
         return rdct.content
 
-    def detect(self, outputs, batch, image_shape, image_id):
+    def detect(self, outputs, batch, image_shape, image_id, config=None):
         """Detect boxes."""
         outputs_num = len(outputs)
         # output [|32, 52, 52, 3, 85| ]
@@ -171,7 +171,7 @@ class DetectionEngine:
                 y = y.reshape(-1)
                 w = w.reshape(-1)
                 h = h.reshape(-1)
-                cls_emb = cls_emb.reshape(-1, 80)
+                cls_emb = cls_emb.reshape(-1, config.num_classes)
                 conf = conf.reshape(-1)
                 cls_argmax = cls_argmax.reshape(-1)
 
@@ -203,7 +203,7 @@ def parse_args():
 
     # device related
     parser.add_argument('--device_target', type=str, default='GPU', choices=['Ascend', 'GPU'],
-                        help='device where the code will be implemented. (Default: Ascend)')
+                        help='device where the code will be implemented. (Default: GPU)')
 
     # dataset related
     parser.add_argument('--data_dir', required=True, type=str, default='', help='train data dir')
@@ -302,7 +302,8 @@ def test():
         image_id = image_id.asnumpy()
         image_shape = image_shape.asnumpy()
 
-        detection.detect([output_small, output_me, output_big], args.per_batch_size, image_shape, image_id)
+        detection.detect([output_small, output_me, output_big], args.per_batch_size,
+                         image_shape, image_id, config)
         if i % 1000 == 0:
             args.logger.info('Processing... {:.2f}% '.format(i * args.per_batch_size / data_size * 100))
 

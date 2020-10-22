@@ -23,7 +23,6 @@ import mindspore.dataset.transforms.vision.c_transforms as CV
 from src.distributed_sampler import DistributedSampler
 from src.transforms import reshape_fn, MultiScaleTrans
 
-
 min_keypoints_per_image = 10
 
 
@@ -56,6 +55,7 @@ def has_valid_annotation(anno):
 
 class COCOYoloDataset:
     """YOLOV3 Dataset for COCO."""
+
     def __init__(self, root, ann_file, remove_images_without_annotations=True,
                  filter_crowd_anno=True, is_training=True):
         self.coco = COCO(ann_file)

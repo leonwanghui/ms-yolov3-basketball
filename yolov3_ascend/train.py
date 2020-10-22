@@ -31,10 +31,9 @@ from mindspore.train.serialization import load_checkpoint, load_param_into_net
 from src.yolo import YOLOV3DarkNet53, YoloWithLossCell, TrainingWrapper
 from src.logger import get_logger
 from src.util import AverageMeter, load_backbone, get_param_groups
-from src.lr_scheduler import warmup_step_lr, warmup_cosine_annealing_lr, \
-    warmup_cosine_annealing_lr_V2, warmup_cosine_annealing_lr_sample
+from src.lr_scheduler import warmup_step_lr
 from src.yolo_dataset import create_yolo_dataset
-from src.initializer import default_recurisive_init
+from src.initializer import default_recursive_init
 from src.config import ConfigYOLOV3DarkNet53
 from src.transforms import batch_preprocess_true_box, batch_preprocess_true_box_single
 from src.util import ShapeRecord
@@ -127,7 +126,7 @@ def train():
 
     network = YOLOV3DarkNet53(is_training=True)
     # default is kaiming-normal
-    default_recurisive_init(network)
+    default_recursive_init(network)
 
     pretrained_backbone_slice = args.pretrained_backbone.split('/')
     backbone_ckpt_file = pretrained_backbone_slice[len(pretrained_backbone_slice)-1]
@@ -187,7 +186,7 @@ def train():
     args.steps_per_epoch = int(data_size / args.per_batch_size / args.group_size)
 
     if not args.ckpt_interval:
-        args.ckpt_interval = args.steps_per_epoch
+        args.ckpt_interval = args.steps_per_epoch * 10
 
     # lr scheduler
     if args.lr_scheduler == 'exponential':

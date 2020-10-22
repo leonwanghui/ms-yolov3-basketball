@@ -69,6 +69,7 @@ class YoloBlock(nn.Cell):
         YoloBlock(1024, 512, 255)
 
     """
+
     def __init__(self, in_channels, out_chls, out_channels):
         super(YoloBlock, self).__init__()
         out_chls_2 = out_chls*2
@@ -118,6 +119,7 @@ class YOLOv3(nn.Cell):
                 backbone=darknet53(),
                 out_channel=255)
      """
+
     def __init__(self, backbone_shape, backbone, out_channel):
         super(YOLOv3, self).__init__()
         self.out_channel = out_channel
@@ -239,6 +241,7 @@ class DetectionBlock(nn.Cell):
 
 class Iou(nn.Cell):
     """Calculate the iou of boxes"""
+
     def __init__(self):
         super(Iou, self).__init__()
         self.min = P.Minimum()
@@ -250,8 +253,8 @@ class Iou(nn.Cell):
         # convert to topLeft and rightDown
         box1_xy = box1[:, :, :, :, :, :2]
         box1_wh = box1[:, :, :, :, :, 2:4]
-        box1_mins = box1_xy - box1_wh / F.scalar_to_array(2.0) # topLeft
-        box1_maxs = box1_xy + box1_wh / F.scalar_to_array(2.0) # rightDown
+        box1_mins = box1_xy - box1_wh / F.scalar_to_array(2.0)  # topLeft
+        box1_maxs = box1_xy + box1_wh / F.scalar_to_array(2.0)  # rightDown
 
         box2_xy = box2[:, :, :, :, :, :2]
         box2_wh = box2[:, :, :, :, :, 2:4]
@@ -261,9 +264,9 @@ class Iou(nn.Cell):
         intersect_mins = self.max(box1_mins, box2_mins)
         intersect_maxs = self.min(box1_maxs, box2_maxs)
         intersect_wh = self.max(intersect_maxs - intersect_mins, F.scalar_to_array(0.0))
-        # P.squeeze: for effiecient slice
+        # P.squeeze: for efficient slice
         intersect_area = P.Squeeze(-1)(intersect_wh[:, :, :, :, :, 0:1]) * \
-                         P.Squeeze(-1)(intersect_wh[:, :, :, :, :, 1:2])
+            P.Squeeze(-1)(intersect_wh[:, :, :, :, :, 1:2])
         box1_area = P.Squeeze(-1)(box1_wh[:, :, :, :, :, 0:1]) * P.Squeeze(-1)(box1_wh[:, :, :, :, :, 1:2])
         box2_area = P.Squeeze(-1)(box2_wh[:, :, :, :, :, 0:1]) * P.Squeeze(-1)(box2_wh[:, :, :, :, :, 1:2])
         iou = intersect_area / (box1_area + box2_area - intersect_area)
@@ -275,6 +278,7 @@ class YoloLossBlock(nn.Cell):
     """
     Loss block cell of YOLOV3 network.
     """
+
     def __init__(self, scale, config=ConfigYOLOV3DarkNet53()):
         super(YoloLossBlock, self).__init__()
         self.config = config
@@ -390,6 +394,7 @@ class YOLOV3DarkNet53(nn.Cell):
 
 class YoloWithLossCell(nn.Cell):
     """YOLOV3 loss."""
+
     def __init__(self, network):
         super(YoloWithLossCell, self).__init__()
         self.yolo_network = network
@@ -408,6 +413,7 @@ class YoloWithLossCell(nn.Cell):
 
 class TrainingWrapper(nn.Cell):
     """Training wrapper."""
+
     def __init__(self, network, optimizer, sens=1.0):
         super(TrainingWrapper, self).__init__(auto_prefix=False)
         self.network = network

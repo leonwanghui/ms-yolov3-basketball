@@ -13,12 +13,13 @@
 # limitations under the License.
 # ============================================================================
 """YOLOV3 loss."""
-from mindspore.ops import operations as P
 import mindspore.nn as nn
+from mindspore.ops import operations as P
 
 
 class XYLoss(nn.Cell):
     """Loss for x and y."""
+
     def __init__(self):
         super(XYLoss, self).__init__()
         self.cross_entropy = P.SigmoidCrossEntropyWithLogits()
@@ -32,6 +33,7 @@ class XYLoss(nn.Cell):
 
 class WHLoss(nn.Cell):
     """Loss for w and h."""
+
     def __init__(self):
         super(WHLoss, self).__init__()
         self.square = P.Square()
@@ -45,6 +47,7 @@ class WHLoss(nn.Cell):
 
 class ConfidenceLoss(nn.Cell):
     """Loss for confidence."""
+
     def __init__(self):
         super(ConfidenceLoss, self).__init__()
         self.cross_entropy = P.SigmoidCrossEntropyWithLogits()
@@ -59,6 +62,7 @@ class ConfidenceLoss(nn.Cell):
 
 class ClassLoss(nn.Cell):
     """Loss for classification."""
+
     def __init__(self):
         super(ClassLoss, self).__init__()
         self.cross_entropy = P.SigmoidCrossEntropyWithLogits()

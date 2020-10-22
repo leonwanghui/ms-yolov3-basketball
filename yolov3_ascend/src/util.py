@@ -13,8 +13,8 @@
 # limitations under the License.
 # ============================================================================
 """Util class or function."""
-from mindspore.train.serialization import load_checkpoint
 import mindspore.nn as nn
+from mindspore.train.serialization import load_checkpoint
 
 
 class AverageMeter:
@@ -149,6 +149,7 @@ def get_param_groups(network):
 
 class ShapeRecord:
     """Log image shape."""
+
     def __init__(self):
         self.shape_record = {
             320: 0,

@@ -170,7 +170,7 @@ def train():
     args.steps_per_epoch = int(data_size / args.per_batch_size / args.group_size)
 
     if not args.ckpt_interval:
-        args.ckpt_interval = args.steps_per_epoch
+        args.ckpt_interval = args.steps_per_epoch * 10
 
     lr = get_lr(args)
 
