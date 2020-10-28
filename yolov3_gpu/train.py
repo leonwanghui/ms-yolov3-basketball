@@ -82,6 +82,8 @@ def parse_args():
                         help='Epoch of changing of lr changing, split with ",". Default: 220,250')
     parser.add_argument('--lr_gamma', type=float, default=0.1,
                         help='Decrease lr by a factor of exponential lr_scheduler. Default: 0.1')
+    parser.add_argument('--eta_min', type=float, default=0., help='Eta_min in cosine_annealing scheduler. Default: 0')
+    parser.add_argument('--T_max', type=int, default=320, help='T-max in cosine_annealing scheduler. Default: 320')
     parser.add_argument('--weight_decay', type=float, default=0.0005, help='Weight decay factor. Default: 0.0005')
     parser.add_argument('--momentum', type=float, default=0.9, help='Momentum. Default: 0.9')
 
@@ -97,8 +99,8 @@ def parse_args():
     parser.add_argument('--ckpt_interval', type=int, default=None, help='Save checkpoint interval. Default: None')
 
     # distributed related
-    parser.add_argument('--is_distributed', type=int, default=1,
-                        help='Distribute train or not, 1 for yes, 0 for no. Default: 1')
+    parser.add_argument('--is_distributed', type=int, default=0,
+                        help='Distribute train or not, 1 for yes, 0 for no. Default: 0')
     parser.add_argument('--rank', type=int, default=0, help='Local rank of distributed. Default: 0')
     parser.add_argument('--group_size', type=int, default=1, help='World size of device. Default: 1')
 
@@ -212,8 +214,6 @@ def train():
     for i, data in enumerate(data_loader):
         images = data["image"]
         input_shape = images.shape[2:4]
-        args.logger.info('iter[{}], shape{}'.format(i, input_shape[0]))
-
         images = Tensor.from_numpy(images)
 
         batch_y_true_0 = Tensor.from_numpy(data['bbox1'])

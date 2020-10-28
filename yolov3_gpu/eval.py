@@ -46,9 +46,7 @@ class Redirect:
         self.content = ""
 
 
-label_list = ['ball', 'defense', 'basket', 'shoot', 'run',
-              'stand', 'block', 'pass', 'dunk', 'rebound',
-              'breakthrough']
+label_list = ['stand', 'walk', 'run', 'shoot', 'defense']
 
 
 class DetectionEngine:
@@ -85,7 +83,7 @@ class DetectionEngine:
 
     def _nms(self, predicts, threshold):
         """Calculate NMS."""
-        # conver xywh -> xmin ymin xmax ymax
+        # convert xywh -> xmin ymin xmax ymax
         x1 = predicts[:, 0]
         y1 = predicts[:, 1]
         x2 = x1 + predicts[:, 2]
@@ -223,7 +221,7 @@ def parse_args():
 
     args, _ = parser.parse_known_args()
     args.data_root = os.path.join(args.data_dir, 'images')
-    args.ann_file = os.path.join(args.data_dir, 'annotation.json')
+    args.ann_file = os.path.join(args.data_dir, 'eval_annotation.json')
 
     return args
 

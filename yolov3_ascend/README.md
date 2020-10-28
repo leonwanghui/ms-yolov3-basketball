@@ -1,132 +1,60 @@
-# YOLOV3-DarkNet53 Example
+# MindSpore YOLOv3-DarkNet53 Tutorial with ModelArts Ascend Service
 
-## Description
+This is a tutorial for training MindSpore YOLOv3-DarkNet53 model to detecting basketball game.
 
-This is an example of training YOLOV3-DarkNet53 with COCO2014 dataset in MindSpore.
+> **NOTICE:** The codebase of this tutorial is developed based on `v0.5` MindSpore [ModelZoo](https://gitee.com/mindspore/mindspore/tree/r0.5/model_zoo/yolov3_darknet53).
 
-## Requirements
+## Guidelines
 
-- Install [MindSpore](https://www.mindspore.cn/install/en).
-
-- Download the dataset COCO2014.
-
-> Unzip the COCO2014 dataset to any path you want, the folder should include train and eval dataset as follows:
+### Download source code
 
 ```
-.
-└─dataset
-    ├─train2014
-    ├─val2014
-    └─annotations
+git clone https://github.com/leonwanghui/ms-yolov3-basketball.git
+cd ms-yolov3-basketball/
 ```
 
-## Structure
-
-```shell
-.
-└─yolov3_darknet53
-  ├─README.md
-  ├─scripts
-    ├─run_standalone_train.sh         # launch standalone training(1p)
-    ├─run_distribute_train.sh         # launch distributed training(8p)
-    └─run_eval.sh                     # launch evaluating
-  ├─src
-    ├─config.py                       # parameter configuration
-    ├─darknet.py                      # backbone of network
-    ├─distributed_sampler.py          # iterator of dataset
-    ├─initializer.py                  # initializer of parameters
-    ├─logger.py                       # log function
-    ├─loss.py                         # loss function
-    ├─lr_scheduler.py                 # generate learning rate
-    ├─transforms.py                   # Preprocess data
-    ├─util.py                         # util function
-    ├─yolo.py                         # yolov3 network
-    ├─yolo_dataset.py                 # create dataset for YOLOV3
-  ├─eval.py                           # eval net
-  └─train.py                          # train net
-```
-
-## Running the example
-
-### Train
-
-#### Usage
+### Download basketball dataset
 
 ```
-# distributed training
-sh run_distribute_train.sh [DATASET_PATH] [PRETRAINED_BACKBONE] [MINDSPORE_HCCL_CONFIG_PATH]
-
-# standalone training
-sh run_standalone_train.sh [DATASET_PATH] [PRETRAINED_BACKBONE]
+cd basketball-dataset/ && wget https://ascend-tutorials.obs.cn-north-4.myhuaweicloud.com/yolov3-darknet53/basketball-dataset/basketball-dataset.zip
+unzip basketball-dataset.zip && rm basketball-dataset.zip
+cd ../yolov3_ascend/
 ```
 
-#### Launch
-
-```bash
-# distributed training example(8p)
-sh run_distribute_train.sh dataset/coco2014 backbone/backbone.ckpt rank_table_8p.json
-
-# standalone training example(1p)
-sh run_standalone_train.sh dataset/coco2014 backbone/backbone.ckpt
-```
-
-> About rank_table.json, you can refer to the [distributed training tutorial](https://www.mindspore.cn/tutorial/en/master/advanced_use/distributed_training.html).
-
-#### Result
-
-Training result will be stored in the scripts path, whose folder name begins with "train" or "train_parallel". You can find checkpoint file together with result like the followings in log.txt.
+### Download the pre-trained DarkNet-53 backbone and YOLOv3 model
 
 ```
-# distribute training result(8p)
-epoch[0], iter[0], loss:14623.384766, 1.23 imgs/sec, lr:7.812499825377017e-05
-epoch[0], iter[100], loss:1486.253051, 15.01 imgs/sec, lr:0.007890624925494194
-epoch[0], iter[200], loss:288.579535, 490.41 imgs/sec, lr:0.015703124925494194
-epoch[0], iter[300], loss:153.136754, 531.99 imgs/sec, lr:0.023515624925494194
-epoch[1], iter[400], loss:106.429322, 405.14 imgs/sec, lr:0.03132812678813934
-...
-epoch[318], iter[102000], loss:34.135306, 431.06 imgs/sec, lr:9.63797629083274e-06
-epoch[319], iter[102100], loss:35.652469, 449.52 imgs/sec, lr:2.409552052995423e-06
-epoch[319], iter[102200], loss:34.652273, 384.02 imgs/sec, lr:2.409552052995423e-06
-epoch[319], iter[102300], loss:35.430038, 423.49 imgs/sec, lr:2.409552052995423e-06
-...
+cd ./ckpt_files/
+wget https://ascend-tutorials.obs.cn-north-4.myhuaweicloud.com/yolov3_darknet53/ckpt_files/backbone_darknet53.ckpt
+wget https://ascend-tutorials.obs.cn-north-4.myhuaweicloud.com/yolov3_darknet53/ckpt_files/yolov3-320_1600.ckpt
 ```
 
-### Infer
+### Upload the dataset and source code to OBS service
 
-#### Usage
+Please upload the basketball dataset, pre-trained models and source code to [OBS public cloud service](https://www.huaweicloud.com/product/obs.html) with the format requirement below:
 
-```
-# infer
-sh run_eval.sh [DATASET_PATH] [CHECKPOINT_PATH]
-```
+<img src="../docs/data_upload_obs.jpg" alt="OBS Data Upload" width="600"/>
 
-#### Launch
+### Model training
 
-```bash
-# infer with checkpoint
-sh run_eval.sh dataset/coco2014/ checkpoint/0-319_102400.ckpt
+Firstly, users need to configure the parameters of training workload like below:
 
-```
+<img src="../docs/yolov3_trainconfig.jpg" alt="YOLOv3 Train Config" width="600"/>
 
-> checkpoint can be produced in training process.
+Then follow the video below to activate the training workload:
 
+[Watch the video](https://ascend-tutorials.obs.cn-north-4.myhuaweicloud.com/yolov3_darknet53/demo/yolov3_train_demo.mp4)
 
-#### Result
+### Model prediction
 
-Inference result will be stored in the scripts path, whose folder name is "eval". Under this, you can find result like the followings in log.txt.
+Firstly, users need to configure the parameters of prediction workload like below:
 
-```
-=============coco eval reulst=========
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.311
- Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.528
- Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.322
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.127
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.323
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.428
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.259
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.398
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.423
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.224
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.442
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.551
-```
+<img src="../docs/yolov3_predictconfig.jpg" alt="YOLOv3 Predict Config" width="600"/>
+
+Then follow the video below to activate the prediction workload:
+
+[Watch the video](https://ascend-tutorials.obs.cn-north-4.myhuaweicloud.com/yolov3_darknet53/demo/yolov3_predict_demo.mp4)
+
+## License
+
+[Apache License 2.0](../LICENSE)

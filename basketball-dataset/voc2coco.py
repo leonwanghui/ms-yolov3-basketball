@@ -9,7 +9,10 @@ import xml.etree.ElementTree as ET
 
 
 START_BOUNDING_BOX_ID = 1
-PRE_DEFINE_CATEGORIES = {}
+PRE_DEFINE_CATEGORIES = {'ball': 0, 'defense': 1, 'basket': 2, 'shoot': 3, 'run': 4,
+                         'stand': 5, 'block': 6, 'pass': 7, 'dunk': 8, 'rebound': 9,
+                         'breakthrough': 10,
+                         }
 
 
 def get(root, name):
@@ -63,7 +66,7 @@ def convert(xml_list, xml_dir, json_file):
         image = {'file_name': filename, 'height': height, 'width': width,
                  'id': image_id}
         json_dict['images'].append(image)
-        # Cruuently we do not support segmentation
+        # Currently we do not support segmentation
         #  segmented = get_and_check(root, 'segmented', 1).text
         #  assert segmented == '0'
         for obj in get(root, 'object'):
@@ -101,7 +104,7 @@ def convert(xml_list, xml_dir, json_file):
 if __name__ == '__main__':
     if len(sys.argv) <= 1:
         print('3 auguments are need.')
-        print('Usage: %s XML_LIST.txt XML_DIR OUTPU_JSON.json' % (sys.argv[0]))
+        print('Usage: %s XML_LIST.txt XML_DIR OUTPUT_JSON.json' % (sys.argv[0]))
         exit(1)
 
     convert(sys.argv[1], sys.argv[2], sys.argv[3])

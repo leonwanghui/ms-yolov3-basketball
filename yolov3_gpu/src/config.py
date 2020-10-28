@@ -42,7 +42,7 @@ class ConfigYOLOV3DarkNet53:
                    [608, 608]
                    ]
 
-    num_classes = 11
+    num_classes = 5
     max_box = 50
 
     backbone_input_shape = [32, 64, 128, 256, 512]

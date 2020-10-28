@@ -31,7 +31,8 @@ from mindspore.train.serialization import load_checkpoint, load_param_into_net
 from src.yolo import YOLOV3DarkNet53, YoloWithLossCell, TrainingWrapper
 from src.logger import get_logger
 from src.util import AverageMeter, load_backbone, get_param_groups
-from src.lr_scheduler import warmup_step_lr
+from src.lr_scheduler import warmup_step_lr, warmup_cosine_annealing_lr, \
+    warmup_cosine_annealing_lr_V2, warmup_cosine_annealing_lr_sample
 from src.yolo_dataset import create_yolo_dataset
 from src.initializer import default_recursive_init
 from src.config import ConfigYOLOV3DarkNet53
@@ -61,6 +62,7 @@ def parse_args():
     # dataset related
     parser.add_argument('--per_batch_size', default=32, type=int, help='batch size for per gpu')
     parser.add_argument('--epoch_size', type=int, default=320, help='max epoch num to train the model')
+    parser.add_argument('--warmup_epochs', default=0, type=float, help='warmup epoch')
 
     # network related
     parser.add_argument('--pretrained_backbone', default='', type=str, help='model_path, local pretrained backbone'
@@ -75,7 +77,7 @@ def parse_args():
     parser.add_argument('--lr_gamma', type=float, default=0.1,
                         help='decrease lr by a factor of exponential lr_scheduler')
     parser.add_argument('--eta_min', type=float, default=0., help='eta_min in cosine_annealing scheduler')
-    parser.add_argument('--warmup_epochs', default=0, type=float, help='warmup epoch')
+    parser.add_argument('--T_max', type=int, default=320, help='T-max in cosine_annealing scheduler')
     parser.add_argument('--weight_decay', type=float, default=0.0005, help='weight decay')
     parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 
@@ -91,7 +93,6 @@ def parse_args():
 
     parser.add_argument('--rank', type=int, default=0, help='Local rank of distributed. Default: 0')
     parser.add_argument('--group_size', type=int, default=1, help='World size of device. Default: 1')
-    parser.add_argument('--is_save_on_master', type=int, default=1, help='save ckpt on master or all rank')
 
     # roma obs
     parser.add_argument('--data_url', required=True, default=None, help='Location of data.')
@@ -197,6 +198,27 @@ def train():
                             args.epoch_size,
                             gamma=args.lr_gamma,
                             )
+    elif args.lr_scheduler == 'cosine_annealing':
+        lr = warmup_cosine_annealing_lr(args.lr,
+                                        args.steps_per_epoch,
+                                        args.warmup_epochs,
+                                        args.max_epoch,
+                                        args.T_max,
+                                        args.eta_min)
+    elif args.lr_scheduler == 'cosine_annealing_V2':
+        lr = warmup_cosine_annealing_lr_V2(args.lr,
+                                           args.steps_per_epoch,
+                                           args.warmup_epochs,
+                                           args.max_epoch,
+                                           args.T_max,
+                                           args.eta_min)
+    elif args.lr_scheduler == 'cosine_annealing_sample':
+        lr = warmup_cosine_annealing_lr_sample(args.lr,
+                                               args.steps_per_epoch,
+                                               args.warmup_epochs,
+                                               args.max_epoch,
+                                               args.T_max,
+                                               args.eta_min)
     else:
         raise NotImplementedError(args.lr_scheduler)
 
@@ -231,7 +253,6 @@ def train():
     for i, data in enumerate(data_loader):
         images = data["image"]
         input_shape = images.shape[2:4]
-        args.logger.info('iter[{}], shape{}'.format(i, input_shape[0]))
         shape_record.set(input_shape)
 
         images = Tensor(images)

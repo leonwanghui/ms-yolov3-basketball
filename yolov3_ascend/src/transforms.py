@@ -191,7 +191,7 @@ def _preprocess_true_boxes(true_boxes, anchors, in_shape, num_classes,
                     y_true[l][j, i, k, 0:4] = true_boxes[t, 0:4]
                     y_true[l][j, i, k, 4] = 1.
 
-                    # lable-smooth
+                    # label-smooth
                     if label_smooth:
                         sigma = label_smooth_factor/(num_classes-1)
                         y_true[l][j, i, k, 5:] = sigma

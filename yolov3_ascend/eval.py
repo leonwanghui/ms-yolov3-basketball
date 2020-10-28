@@ -49,9 +49,7 @@ class Redirect:
         self.content = ""
 
 
-label_list = ['ball', 'defense', 'basket', 'shoot', 'run',
-              'stand', 'block', 'pass', 'dunk', 'rebound',
-              'breakthrough']
+label_list = ['stand', 'walk', 'run', 'shoot', 'defense']
 
 
 class DetectionEngine:
@@ -278,7 +276,7 @@ def test():
     print('Download data.')
     mox.file.copy_parallel(src_url=args.data_url, dst_url=local_data_path)
     args.data_root = os.path.join(local_data_path, 'images')
-    args.ann_file = os.path.join(local_data_path, 'annotation.json')
+    args.ann_file = os.path.join(local_data_path, 'eval_annotation.json')
 
     ds, data_size = create_yolo_dataset(args.data_root, args.ann_file,
                                         is_training=False, batch_size=args.per_batch_size,
