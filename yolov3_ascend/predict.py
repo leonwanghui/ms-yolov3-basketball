@@ -20,10 +20,9 @@ import time
 import sys
 from collections import defaultdict
 
+import cv2
 import numpy as np
 import moxing as mox
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
 
 import mindspore as ms
 import mindspore.context as context
@@ -32,22 +31,10 @@ from mindspore.train.serialization import load_checkpoint, load_param_into_net
 
 from src.yolo import YOLOV3DarkNet53
 from src.logger import get_logger
-from src.yolo_dataset import create_yolo_dataset
 from src.config import ConfigYOLOV3DarkNet53
+from src.transforms import _reshape_data
 
 context.set_context(mode=context.GRAPH_MODE, device_target="Ascend", save_graphs=False)
-
-
-class Redirect:
-    def __init__(self):
-        self.content = ""
-
-    def write(self, content):
-        self.content += content
-
-    def flush(self):
-        self.content = ""
-
 
 label_list = ['stand', 'walk', 'run', 'shoot', 'defense']
 
@@ -59,30 +46,22 @@ class DetectionEngine:
         self.ignore_threshold = args.ignore_threshold
         self.labels = label_list
         self.num_classes = len(self.labels)
-        self.results = {}
-        self.file_path = ''
-        self.save_prefix = args.outputs_dir
-        self.ann_file = args.ann_file
-        self._coco = COCO(self.ann_file)
-        self._img_ids = list(sorted(self._coco.imgs.keys()))
+        self.results = defaultdict(list)
         self.det_boxes = []
         self.nms_thresh = args.nms_thresh
-        self.coco_catIds = self._coco.getCatIds()
 
     def do_nms_for_results(self):
         """Get result boxes."""
-        for img_id in self.results:
-            for clsi in self.results[img_id]:
-                dets = self.results[img_id][clsi]
-                dets = np.array(dets)
-                keep_index = self._nms(dets, self.nms_thresh)
+        for clsi in self.results:
+            dets = self.results[clsi]
+            dets = np.array(dets)
+            keep_index = self._nms(dets, self.nms_thresh)
 
-                keep_box = [{'image_id': int(img_id),
-                             'category_id': int(clsi),
-                             'bbox': list(dets[i][:4].astype(float)),
-                             'score': dets[i][4].astype(float)}
-                            for i in keep_index]
-                self.det_boxes.extend(keep_box)
+            keep_box = [{'category_id': self.labels[int(clsi)],
+                         'bbox': list(dets[i][:4].astype(float)),
+                         'score': dets[i][4].astype(float)}
+                        for i in keep_index]
+            self.det_boxes.extend(keep_box)
 
     def _nms(self, dets, thresh):
         """Calculate NMS."""
@@ -110,39 +89,11 @@ class DetectionEngine:
             inter = w * h
             ovr = inter / (areas[i] + areas[order[1:]] - inter)
 
-            inds = np.where(ovr <= thresh)[0]
-            order = order[inds + 1]
+            indexes = np.where(ovr <= thresh)[0]
+            order = order[indexes + 1]
         return keep
 
-    def write_result(self):
-        """Save result to file."""
-        import json
-        t = datetime.datetime.now().strftime('_%Y_%m_%d_%H_%M_%S')
-        try:
-            self.file_path = self.save_prefix + '/predict' + t + '.json'
-            f = open(self.file_path, 'w')
-            json.dump(self.det_boxes, f)
-        except IOError as e:
-            raise RuntimeError("Unable to open json file to dump. What(): {}".format(str(e)))
-        else:
-            f.close()
-            return self.file_path
-
-    def get_eval_result(self):
-        """Get eval result."""
-        cocoGt = COCO(self.ann_file)
-        cocoDt = cocoGt.loadRes(self.file_path)
-        cocoEval = COCOeval(cocoGt, cocoDt, 'bbox')
-        cocoEval.evaluate()
-        cocoEval.accumulate()
-        rdct = Redirect()
-        stdout = sys.stdout
-        sys.stdout = rdct
-        cocoEval.summarize()
-        sys.stdout = stdout
-        return rdct.content
-
-    def detect(self, outputs, batch, image_shape, image_id, config=None):
+    def detect(self, outputs, batch, image_shape, config=None):
         """Detect boxes."""
         outputs_num = len(outputs)
         # output [|32, 52, 52, 3, 85| ]
@@ -157,8 +108,7 @@ class DetectionEngine:
                 out_num = 1
                 for d in dimensions:
                     out_num *= d
-                ori_w, ori_h = image_shape[batch_id]
-                img_id = int(image_id[batch_id])
+                ori_w, ori_h = image_shape
                 x = out_item_single[..., 0] * ori_w
                 y = out_item_single[..., 1] * ori_h
                 w = out_item_single[..., 2] * ori_w
@@ -187,15 +137,27 @@ class DetectionEngine:
                 for x_lefti, y_lefti, wi, hi, confi, clsi in zip(x_top_left, y_top_left, w, h, confidence, cls_argmax):
                     if confi < self.ignore_threshold:
                         continue
-                    if img_id not in self.results:
-                        self.results[img_id] = defaultdict(list)
                     x_lefti = max(0, x_lefti)
                     y_lefti = max(0, y_lefti)
                     wi = min(wi, ori_w)
                     hi = min(hi, ori_h)
                     # transform catId to match coco
-                    coco_clsi = self.coco_catIds[clsi]
-                    self.results[img_id][coco_clsi].append([x_lefti, y_lefti, wi, hi, confi])
+                    coco_clsi = str(clsi)
+                    self.results[coco_clsi].append([x_lefti, y_lefti, wi, hi, confi])
+
+    def draw_boxes_in_image(self, img_path):
+        img = cv2.imread(img_path, 1)
+        for i in range(len(self.det_boxes)):
+            x = int(self.det_boxes[i]['bbox'][0])
+            y = int(self.det_boxes[i]['bbox'][1])
+            w = int(self.det_boxes[i]['bbox'][2])
+            h = int(self.det_boxes[i]['bbox'][3])
+            cv2.rectangle(img, (x, y), (x+w, y+h), (0, 225, 0), 1)
+            score = round(self.det_boxes[i]['score'], 3)
+            text = self.det_boxes[i]['category_id']+', '+str(score)
+            cv2.putText(img, text, (x, y), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 225), 2)
+
+        return img
 
 
 def parse_args():
@@ -210,8 +172,7 @@ def parse_args():
 
     # detect_related
     parser.add_argument('--nms_thresh', type=float, default=0.5, help='threshold for NMS')
-    parser.add_argument('--testing_shape', type=str, default='', help='shape for test ')
-    parser.add_argument('--ignore_threshold', type=float, default=0.001, help='threshold to throw low quality boxes')
+    parser.add_argument('--ignore_threshold', type=float, default=0.01, help='threshold to throw low quality boxes')
 
     # roma obs
     parser.add_argument('--data_url', required=True, default=None, help='Location of data.')
@@ -223,15 +184,16 @@ def parse_args():
     return args
 
 
-def convert_testing_shape(args):
-    """Convert testing shape to list."""
-    testing_shape = [int(args.testing_shape), int(args.testing_shape)]
-    return testing_shape
+def data_preprocess(img_path, config):
+    img = cv2.imread(img_path, 1)
+    img, ori_image_shape = _reshape_data(img, config.test_img_shape)
+    img = img.transpose(2, 0, 1)
+
+    return img, ori_image_shape
 
 
-def test():
-    """The function of eval."""
-    start_time = time.time()
+def predict():
+    """The function of predict."""
     args = parse_args()
 
     # logger
@@ -268,60 +230,45 @@ def test():
         exit(1)
 
     config = ConfigYOLOV3DarkNet53()
-    if args.testing_shape:
-        config.test_img_shape = convert_testing_shape(args)
 
     local_data_path = '/cache/data'
     # data download
     print('Download data.')
     mox.file.copy_parallel(src_url=args.data_url, dst_url=local_data_path)
-    args.data_root = os.path.join(local_data_path, 'images')
-    args.ann_file = os.path.join(local_data_path, 'eval_annotation.json')
-
-    ds, data_size = create_yolo_dataset(args.data_root, args.ann_file,
-                                        is_training=False, batch_size=args.per_batch_size,
-                                        max_epoch=1, device_num=1, rank=rank_id, shuffle=False,
-                                        config=config)
-
-    args.logger.info('testing shape: {}'.format(config.test_img_shape))
-    args.logger.info('total {} images to eval'.format(data_size))
-
-    network.set_train(False)
 
     # init detection engine
     detection = DetectionEngine(args)
 
+    # preprocess the image
+    images = os.listdir(local_data_path)
+    image_path = os.path.join(local_data_path, images[0])
+    image, image_shape = data_preprocess(image_path, config)
+
+    args.logger.info('testing shape: {}'.format(config.test_img_shape))
+
     input_shape = Tensor(tuple(config.test_img_shape), ms.float32)
     args.logger.info('Start inference....')
-    for i, data in enumerate(ds.create_dict_iterator()):
-        image = Tensor(data["image"])
+    network.set_train(False)
+    prediction = network(Tensor(image.reshape(1, 3, 416, 416), ms.float32), input_shape)
+    output_big, output_me, output_small = prediction
+    output_big = output_big.asnumpy()
+    output_me = output_me.asnumpy()
+    output_small = output_small.asnumpy()
 
-        image_shape = Tensor(data["image_shape"])
-        image_id = Tensor(data["img_id"])
-
-        prediction = network(image, input_shape)
-        output_big, output_me, output_small = prediction
-        output_big = output_big.asnumpy()
-        output_me = output_me.asnumpy()
-        output_small = output_small.asnumpy()
-        image_id = image_id.asnumpy()
-        image_shape = image_shape.asnumpy()
-
-        detection.detect([output_small, output_me, output_big], args.per_batch_size,
-                         image_shape, image_id, config=config)
-        if i % 1000 == 0:
-            args.logger.info('Processing... {:.2f}% '.format(i * args.per_batch_size / data_size * 100))
-
-    args.logger.info('Calculating mAP...')
+    detection.detect([output_small, output_me, output_big], args.per_batch_size,
+                     image_shape, config)
     detection.do_nms_for_results()
-    result_file_path = detection.write_result()
-    args.logger.info('result file path: {}'.format(result_file_path))
-    eval_result = detection.get_eval_result()
+    img = detection.draw_boxes_in_image(image_path)
 
-    cost_time = time.time() - start_time
-    args.logger.info('\n=============coco eval result=========\n' + eval_result)
-    args.logger.info('testing cost time {:.2f}h'.format(cost_time / 3600.))
+    local_output_dir = '/cache/output'
+    if not os.path.exists(local_output_dir):
+        os.mkdir(local_output_dir)
+    cv2.imwrite(os.path.join(local_output_dir, 'output.jpg'), img)
+
+    # upload output image files
+    print('Upload output image.')
+    mox.file.copy_parallel(src_url=local_output_dir, dst_url=args.train_url)
 
 
 if __name__ == "__main__":
-    test()
+    predict()

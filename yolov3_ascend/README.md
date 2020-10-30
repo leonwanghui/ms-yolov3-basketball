@@ -26,7 +26,7 @@ cd ../yolov3_ascend/
 ```
 cd ./ckpt_files/
 wget https://ascend-tutorials.obs.cn-north-4.myhuaweicloud.com/yolov3_darknet53/ckpt_files/backbone_darknet53.ckpt
-wget https://ascend-tutorials.obs.cn-north-4.myhuaweicloud.com/yolov3_darknet53/ckpt_files/yolov3-320_1600.ckpt
+wget https://ascend-tutorials.obs.cn-north-4.myhuaweicloud.com/yolov3_darknet53/ckpt_files/yolov3-320_124480.ckpt
 ```
 
 ### Upload the dataset and source code to OBS service
