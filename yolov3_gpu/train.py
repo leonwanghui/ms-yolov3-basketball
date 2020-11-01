@@ -13,6 +13,15 @@
 # limitations under the License.
 # ============================================================================
 """YoloV3 train."""
+# Please run the command below to better perform train job:
+#   python train.py --data_dir ../basketball-dataset/ \
+#                   --pretrained_backbone ./ckpt_files/backbone_darknet53.ckpt \
+#                   --lr=0.1 \
+#                   --T_max=320 \
+#                   --max_epoch=320 \
+#                   --warmup_epochs=4 \
+#                   --training_shape=416 \
+#                   --lr_scheduler=cosine_annealing > log.txt 2>&1 &
 import os
 import time
 import argparse
